@@ -42,6 +42,8 @@ class Agent:
      
     def __init__(self, name, description, starting_location, world_graph, use_openai):
         self.name = name
+        # self.age = age
+        # self.innate_traits = innate_traits
         self.description = description
         self.location = starting_location
         self.memory_ratings = []
@@ -67,6 +69,11 @@ class Agent:
         """
 
         prompt = "You are {}. The following is your description: {} You just woke up. What is your goal for today? Write it down in an hourly basis, starting at {}:00. Write only one or two very short sentences. Be very brief. Use at most 50 words.".format(self.name, self.description, str(global_time))
+        # prompt =   "Name: {}(age:{})\n
+        # Innate traits: {}\n
+        # {}\n
+        # On {}, {} {}.\n
+        # Today is {}. Here is {}'s plan today in broad strokes: 1)".format(self.name, self.age, self.innate_traits, self.description, global_last_date, self.name, self.last_plan, global_date, self.name)
         self.plans = generate(prompt_meta.format(prompt), self.use_openai)
     
     def execute_action(self, other_agents, location, global_time, town_areas, prompt_meta):
