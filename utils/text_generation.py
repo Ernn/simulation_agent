@@ -12,7 +12,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
 
-def generate(prompt, use_openai=True):
+def generate(prompt, use_openai=True, debug=False):
     """
     Generates a text completion for a given prompt using either the OpenAI GPT-3 API or the Hugging Face GPT-3 model.
     
@@ -41,6 +41,8 @@ def generate(prompt, use_openai=True):
         hf_generator = pipeline('text-generation', model='EleutherAI/gpt-neo-1.3B', device=0)
         output = hf_generator(prompt, max_length=len(prompt)+128, do_sample=True)
         out = output[0]['generated_text']
+        if debug:
+            return prompt + out
         if '### Response:' in out:
             out = out.split('### Response:')[1]
         if '### Instruction:' in out:

@@ -3,7 +3,7 @@ from utils.text_generation import generate, get_rating
 import networkx as nx
 
 class Agent:
-     
+
     """
     A class to represent an individual agent in a simulation similar to The Sims.
 
@@ -39,7 +39,7 @@ class Agent:
     rate_locations(locations, town_areas, global_time, prompt_meta):
         Rates different locations in the simulated environment based on the agent's preferences and experiences.
     """
-     
+
     def __init__(self, name, description, starting_location, world_graph, use_openai):
         self.name = name
         # self.age = age
@@ -50,12 +50,14 @@ class Agent:
         self.memories = []
         self.compressed_memories = []
         self.plans = ""
+        self.last_plan = ""
         self.world_graph = world_graph
         self.use_openai = use_openai
-        
+        self.conversation = []
+
     def __repr__(self):
         return f"Agent({self.name}, {self.description}, {self.location})"
-    
+
     def plan(self, global_time, prompt_meta):
         """
         Generates the agent's daily plan.
@@ -69,13 +71,11 @@ class Agent:
         """
 
         prompt = "You are {}. The following is your description: {} You just woke up. What is your goal for today? Write it down in an hourly basis, starting at {}:00. Write only one or two very short sentences. Be very brief. Use at most 50 words.".format(self.name, self.description, str(global_time))
-        # prompt =   "Name: {}(age:{})\n
-        # Innate traits: {}\n
-        # {}\n
-        # On {}, {} {}.\n
-        # Today is {}. Here is {}'s plan today in broad strokes: 1)".format(self.name, self.age, self.innate_traits, self.description, global_last_date, self.name, self.last_plan, global_date, self.name)
+        # prompt =   "You are {}, and you are {} years old. Your innate traits are {}. The following is your description: {}\n
+        # On {}, You {}.\n
+        # Today is {}. Here is your plan today in broad strokes: 1)".format(self.name, self.age, self.innate_traits, self.description, global_last_date, self.last_plan, global_date)
         self.plans = generate(prompt_meta.format(prompt), self.use_openai)
-    
+
     def execute_action(self, other_agents, location, global_time, town_areas, prompt_meta):
 
         """Executes the agent's action based on their current situation and interactions with other agents.
@@ -100,18 +100,27 @@ class Agent:
         """
 
         people = [agent.name for agent in other_agents if agent.location == location]
-        
+
         prompt = "You are {}. Your plans are: {}. You are currently in {} with the following description: {}. It is currently {}:00. The following people are in this area: {}. You can interact with them.".format(self.name, self.plans, location.name, town_areas[location.name], str(global_time), ', '.join(people))
-        
+
         people_description = [f"{agent.name}: {agent.description}" for agent in other_agents if agent.location == location.name]
         prompt += ' You know the following about people: ' + '. '.join(people_description)
-        
+
         prompt += "What do you do in the next hour? Use at most 10 words to explain."
         action = generate(prompt_meta.format(prompt), self.use_openai)
+
+        # whether talk with somebody
+        prompt = "You are {}. Next you are going to: {}. Does it mean you want to have a conversation with someone? If not, just answer 'No'. If so, who do you want to talk to? Just answer its name.".format(self.name, action)
+        whether_talk = generate(prompt_meta.format(prompt), self.use_openai)
+        if whether_talk != 'No':
+            agent2_name = whether_talk
+            self.have_a_talk(action, agent2_name, other_agents, global_time, prompt_meta)
+            action += '\n' + '\n'.join(self.conversation)
+            self.conversation = []    # refresh
         return action
-    
+
     def update_memories(self, other_agents, global_time, action_results):
-        
+
         """
         Updates the agent's memories based on their interactions with other agents.
         
@@ -151,7 +160,7 @@ class Agent:
         relevant_memories = memories_sorted[:MEMORY_LIMIT]
         memory_string_to_compress = '.'.join([a[0] for a in relevant_memories])
         return '[Recollection at Time {}:00: {}]'.format(str(global_time), memory_string_to_compress)
-    
+
     def rate_memories(self, locations, global_time, prompt_meta):
 
         """
@@ -225,7 +234,7 @@ class Agent:
             place_ratings.append((location.name, rating, res))
         self.place_ratings = place_ratings
         return sorted(place_ratings, key=lambda x: x[1], reverse=True)
-    
+
     def move(self, new_location_name):
 
         if new_location_name == self.location:
@@ -240,3 +249,31 @@ class Agent:
 
         return self.location
 
+    def have_a_talk(self, action, agent2, other_agents, global_time, prompt_meta):
+        for another_agent in other_agents:
+            if agent2 == another_agent.name:
+                self.conversation.append('[Conversation between {} and {}]'.format(self.name, agent2))
+                prompt = "You are {}. Your plans are: {}. It is currently {}:00. And you are going to {}. ".format(self.name, self.plans, global_time, action)
+                prompt += " You know the following about {}: {}".format(another_agent.name, another_agent.describtion)
+                prompt += " What would you say to {}?".format(another_agent.name)
+                sentence = generate(prompt_meta.format(prompt), self.use_openai)
+                self.conversation.append("{}: {}".format(self.name, sentence))
+
+                trigger = True
+                turn = 0
+                while trigger:
+                    if turn == 0:
+                        person_1 = another_agent
+                        person_2 = self
+                    else:
+                        person_1 = self
+                        person_2 = another_agent
+                    prompt = "You are {}. Your plans are: {}. It is currently {}:00. Now {} is talking to you.".format(person_1.name, person_1.plans, global_time, person_2.name)
+                    prompt += " You know the following about {}: {}\n".format(person_2.name, person_2.describtion)
+                    prompt += 'Here is the dialogue history:\n' + '\n'.join(self.conversation)
+                    prompt += " \n How would you respond to {}? If you decide to end the conversation, just answer 'End'.".format(person_2.name)
+                    sentence = generate(prompt_meta.format(prompt), self.use_openai)
+                    if sentence != 'End':
+                        self.conversation.append("{}: {}".format(self.name, sentence))
+                    else:
+                        trigger = False
