@@ -53,7 +53,95 @@ class Agent:
         self.last_plan = ""
         self.world_graph = world_graph
         self.use_openai = use_openai
+
+        ### wyb
         self.conversation = []
+        ###
+        
+        ### lqh
+        self.reted_memories = []
+        self.importance_index = 0
+        self.importance_score = 0
+        self.reflect_thres = 100
+        ###
+
+    ### creation:lqh todo:lyh
+    def rate_memory(self,memory):
+      """
+        Rates the agent's memories based on their importance.
+      """
+      return 1
+    
+    ### creation:lqh todo:lyh   
+    def retrieve(self,memo_num = 10,quiry=""):
+      """
+        retrieve #memo_num relevant memories to the query based on their recency, importance, and relevance .
+      """
+      return ['[Time: {}. Person: {}. Memory: {}. Importance_score: {}.]']
+        
+    ### creation:lqh
+    def update_rated_memories(self, other_agents, global_time, action_results):
+        
+        """
+        Updates the agent's memories based on their interactions with other agents.
+        
+        Parameters:
+        -----------
+        other_agents : list
+            A list of other Agent objects in the simulation.
+        global_time : int
+            The current time in the simulation.
+        action_results : dict
+            A dictionary of the results of each agent's action.
+        importance_score: int
+            A score indicating the importance of the results of each memory.
+        """
+
+        for agent in other_agents:
+            if agent.location == self.location:
+                memory = action_results[agent.name]
+                importance_memory = self.rate_memory(memory)
+                self.importance_score += importance_memory
+                self.memories.append('[Time: {}. Person: {}. Memory: {}. Importance_score: {}.]\n'.format(str(global_time), agent.name, memory, importance_memory))
+                if self.importance_score>self.reflect_thres:
+                  self.generate_reflections
+                    
+    ### creation:lqh 
+    def generate_reflections(self,num_quiries=3,num_memories=10,prompt_meta=""):
+      self.importance_score = 0
+      # generate quiries
+      prompt = ""
+      for (i,memory) in enumerate(self.rated_memories[self.importance_index:]):
+        prompt.append("{}. {}; ".format(str(i), self.rated_memories.split('Memory:')[1])).split('.')[0]
+      prompt.append("Given only the information above, what are {} most salient high-level questions we can answer about the subjects in the statements?".format(str(num_quiries)))
+      quiries = generate(prompt_meta.format(prompt))
+      quiries = quiries.split('?') # quiries转化为列表
+
+      for quiry in quiries:
+        prompt = ""
+        # retrieve relevant memories
+        relevant_memories = self.retrieve(memory,num_memories)  ######
+
+        #generate insights
+        # name
+        names = {}
+        for (i,memory) in enumerate(relevant_memories):
+          prompt.append("{}. {}; ".format(str(i), memory.split('Memory:')[1].split('.')[0]))
+          person = memory.split('.')[1].split(':')[1]
+          if person in names.keys():
+            names[person]+=1
+          else:
+            names[person] =1
+        person = max(names, key=lambda x: names[x])
+        prompt = "Statements about {}:".format(person)
+        prompt.append("Given only the information above, What {} high-level insights can you infer from the above statements? (example format: insight(because of 1, 5, 3))".format(str(num)))
+        insight = generate(prompt_meta.format(prompt))
+
+        #parse and store time
+        self.update_rated_memories(self, [person], global_time, {person:insight}) ####
+      self.importance_index = len(self.rated_memories)
+      return None
+    
 
     def __repr__(self):
         return f"Agent({self.name}, {self.description}, {self.location})"
